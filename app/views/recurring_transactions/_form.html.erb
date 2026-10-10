@@ -173,6 +173,20 @@
           <%= f.toggle :autopay %>
         </div>
       <% end %>
+
+      <%# Outside the income branch on purpose: a paycheck on a manual account
+          is exactly the kind of series worth posting by itself. Hidden on
+          linked accounts, where the feed delivers the real entry and posting
+          would duplicate it. %>
+      <% if recurring_transaction.auto_postable_shape? %>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium text-primary"><%= t(".auto_post_label") %></p>
+            <p class="text-xs text-secondary"><%= t(".auto_post_hint") %></p>
+          </div>
+          <%= f.toggle :auto_post_choice %>
+        </div>
+      <% end %>
       <div class="space-y-2">
         <%= f.text_area :notes,
               label: t(".notes_label"),

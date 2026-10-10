@@ -51,3 +51,18 @@ en:
       invalid_date: That date could not be read
     override_amount:
       success: Expected amount updated
+    post_now:
+      success: Transaction added
+      failure:
+        generic: That bill could not be added right now
+        not_open: That cycle is already settled
+        not_due: That bill is not due yet. Approve it instead and it will be added on its due date.
+        already_paid: A payment is already recorded against that cycle
+        series_inactive: That bill is not active
+        not_postable_shape: Only bills on manual accounts can be added automatically
+        no_amount: That bill has no amount to add
+        no_name: That bill has no name to add
+    approve:
+      success: "Approved. This will be added on %{date}."
+    unapprove:
+      success: Approval removed

@@ -16,8 +16,10 @@ class RecurringAllocation < ApplicationRecord
   monetize :allocated_amount
 
   enum :state, { suggested: "suggested", confirmed: "confirmed" }, prefix: :allocation
+  # auto_posted is the one source that created its own entry rather than
+  # attaching to one that already existed -- see RecurringTransaction::AutoPoster.
   enum :source, { auto_matched: "auto_matched", user_confirmed: "user_confirmed",
-                  user_created: "user_created" }, prefix: :from
+                  user_created: "user_created", auto_posted: "auto_posted" }, prefix: :from
 
   validates :allocated_amount, presence: true, numericality: { greater_than: 0 }
   validates :currency, presence: true

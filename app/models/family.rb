@@ -240,6 +240,9 @@ class Family < ApplicationRecord
   validates :default_account_sharing, inclusion: { in: SHARING_DEFAULTS }
   validates :personal_budgets, inclusion: { in: [ true, false ] }
   validates :household_budget_enabled, inclusion: { in: [ true, false ] }
+  # Mirrors chk_families_recurring_auto_post_hour so a bad value from the
+  # settings form surfaces as a validation error rather than a StatementInvalid.
+  validates :recurring_auto_post_hour, inclusion: { in: 0..23 }
   validate :timezone_must_be_a_known_zone, if: :timezone_changed?
 
   before_validation :normalize_enabled_currencies!

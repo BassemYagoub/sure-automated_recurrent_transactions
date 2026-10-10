@@ -594,6 +594,11 @@ Rails.application.routes.draw do
       post :reopen
       patch :snooze
       patch :override_amount
+      # The Upcoming tab's two row actions. post_now writes the entry for a
+      # cycle already due; approve clears a future one to post on its own date.
+      post :post_now
+      post :approve
+      delete :unapprove
     end
 
     resources :allocations, controller: :recurring_allocations, only: %i[create]

@@ -286,6 +286,35 @@ class RecurringTransaction < ApplicationRecord
   # list, but they are not tasks.
   scope :needs_action, -> { where(autopay: false) }
 
+  # The three-state toggle: an explicit true/false is the series' own decision,
+  # NULL inherits the family default. Says nothing about the account or the
+  # shape of the series -- auto_postable_shape? answers that separately.
+  def auto_post_enabled?
+    return family.recurring_auto_post_enabled? if auto_post.nil?
+
+    auto_post
+  end
+
+  # Whether this series could ever post by itself, whatever the toggles say.
+  # A linked account's feed will deliver the charge; a transfer needs a pair.
+  def auto_postable_shape?
+    account.present? && account.manual? && !transfer?
+  end
+
+  # The form's view of the three-state column. It posts a plain on/off, so the
+  # writer stores NULL whenever the choice agrees with the family default --
+  # otherwise merely opening and saving a bill would pin it to an explicit
+  # value, and changing the family default later would no longer move it.
+  def auto_post_choice
+    auto_post_enabled?
+  end
+
+  def auto_post_choice=(value)
+    chosen = ActiveModel::Type::Boolean.new.cast(value)
+
+    self.auto_post = chosen == family&.recurring_auto_post_enabled? ? nil : chosen
+  end
+
   # Derived rather than read from the stored `next_expected_date`, which can sit
   # a cycle too far out when a payment posts earlier than the expected day.
   # For installment plans: how many payments are done, out of how many.

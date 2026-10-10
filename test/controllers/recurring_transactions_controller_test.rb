@@ -1157,6 +1157,66 @@ class RecurringTransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "https://pay.example/theirs", read_only_sibling.reload.payment_url
   end
 
+  # --- Auto-post settings ---
+
+  test "update_settings stores the family auto-post default and hour" do
+    patch update_settings_recurring_transactions_url, params: {
+      recurring_auto_post_enabled: "true", recurring_auto_post_hour: "21"
+    }
+
+    assert_redirected_to recurring_transactions_path
+    @family.reload
+    assert @family.recurring_auto_post_enabled?
+    assert_equal 21, @family.recurring_auto_post_hour
+  end
+
+  test "update_settings rejects an hour outside the day" do
+    original = @family.recurring_auto_post_hour
+
+    patch update_settings_recurring_transactions_url, params: { recurring_auto_post_hour: "31" }
+
+    assert_equal I18n.t("recurring_transactions.settings_invalid"), flash[:alert]
+    assert_equal original, @family.reload.recurring_auto_post_hour
+  end
+
+  test "update_settings rejects an hour that is not a number" do
+    original = @family.recurring_auto_post_hour
+
+    patch update_settings_recurring_transactions_url, params: { recurring_auto_post_hour: "lunchtime" }
+
+    assert_equal I18n.t("recurring_transactions.settings_invalid"), flash[:alert]
+    assert_equal original, @family.reload.recurring_auto_post_hour,
+      "a non-numeric hour must not coerce to midnight"
+  end
+
+  # Each control on the settings page submits its own form, so one must not
+  # blank the others.
+  test "toggling detection leaves the auto-post settings alone" do
+    @family.update!(recurring_auto_post_enabled: true, recurring_auto_post_hour: 21)
+
+    patch update_settings_recurring_transactions_url, params: { recurring_transactions_disabled: "true" }
+
+    @family.reload
+    assert @family.recurring_transactions_disabled?
+    assert @family.recurring_auto_post_enabled?
+    assert_equal 21, @family.recurring_auto_post_hour
+  end
+
+  test "update writes an auto_post override only when it differs from the family default" do
+    @family.update!(recurring_auto_post_enabled: false)
+
+    patch recurring_transaction_url(@recurring_transaction), params: {
+      recurring_transaction: { auto_post_choice: "1" }
+    }
+    assert_equal true, @recurring_transaction.reload.auto_post
+
+    patch recurring_transaction_url(@recurring_transaction), params: {
+      recurring_transaction: { auto_post_choice: "0" }
+    }
+    assert_nil @recurring_transaction.reload.auto_post,
+      "agreeing with the family default goes back to inheriting it"
+  end
+
   private
 
     def create_series(name:, account: accounts(:depository), merchant: nil, status: "active", payment_url: nil)

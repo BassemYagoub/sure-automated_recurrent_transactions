@@ -1,0 +1,17 @@
+<%# The Upcoming tab can settle and skip individual cycles, but it cannot turn
+    the feature on or off -- that lives in settings, and nothing on this page
+    would otherwise say so. %>
+
+<div class="bg-container rounded-xl shadow-border-xs p-4 mt-4 flex items-center justify-between gap-4">
+  <div>
+    <p class="text-sm font-medium text-primary"><%= t(".title") %></p>
+    <p class="text-xs text-secondary"><%= t(".description") %></p>
+  </div>
+
+  <%= render DS::Link.new(
+        text: t(".cta"),
+        icon: "settings",
+        variant: "outline",
+        href: recurring_transactions_path
+      ) %>
+</div>

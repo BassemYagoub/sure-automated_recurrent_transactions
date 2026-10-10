@@ -67,6 +67,12 @@ generate_recurring_occurrences:
   queue: "scheduled"
   description: "Materializes the rolling window of recurring-transaction occurrences for every family"
 
+auto_post_recurring_transactions:
+  cron: "0 * * * *" # hourly; each family posts at its own configured local hour
+  class: "AutoPostRecurringTransactionsJob"
+  queue: "scheduled"
+  description: "Posts due recurring transactions for families whose chosen hour has arrived"
+
 generate_insights:
   cron: "0 6 * * *" # daily at 6:00 AM UTC, after the nightly cleanup jobs
   class: "GenerateInsightsJob"

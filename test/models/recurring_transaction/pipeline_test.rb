@@ -80,7 +80,9 @@ class RecurringTransaction::PipelineTest < ActiveSupport::TestCase
     config = ActiveRecord::Base.connection_pool.db_config.configuration_hash
     other = PG.connect({
       dbname: config[:database], host: config[:host], port: config[:port],
-      user: config[:username], password: config[:password]
+      # database.yml sets the pg-native `user` key, so `username` is absent and
+      # a compacted-away user would fall back to the OS account.
+      user: config[:username] || config[:user], password: config[:password]
     }.compact)
     other.exec("SELECT pg_advisory_lock(#{key})")
 
