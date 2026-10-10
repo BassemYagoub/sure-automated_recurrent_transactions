@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_16_220129) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_20_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -837,6 +837,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_220129) do
     t.integer "month_start_day", default: 1, null: false
     t.string "name"
     t.boolean "personal_budgets", default: false, null: false
+    t.boolean "recurring_auto_post_enabled", default: false, null: false
+    t.integer "recurring_auto_post_hour", default: 6, null: false
     t.boolean "recurring_transactions_disabled", default: false, null: false
     t.string "stripe_customer_id"
     t.string "timezone"
@@ -845,6 +847,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_220129) do
     t.index ["bills_feed_token"], name: "index_families_on_bills_feed_token", unique: true
     t.check_constraint "default_account_sharing::text = ANY (ARRAY['shared'::character varying::text, 'private'::character varying::text])", name: "chk_families_default_account_sharing"
     t.check_constraint "month_start_day >= 1 AND month_start_day <= 28", name: "month_start_day_range"
+    t.check_constraint "recurring_auto_post_hour >= 0 AND recurring_auto_post_hour <= 23", name: "chk_families_recurring_auto_post_hour"
   end
 
   create_table "family_documents", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -1883,7 +1886,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_220129) do
     t.index ["recurring_occurrence_id", "entry_id"], name: "idx_recurring_allocations_entry_once", unique: true, where: "(entry_id IS NOT NULL)"
     t.index ["recurring_occurrence_id"], name: "index_recurring_allocations_on_recurring_occurrence_id"
     t.check_constraint "allocated_amount > 0::numeric", name: "chk_recurring_allocations_amount_positive"
-    t.check_constraint "source::text = ANY (ARRAY['auto_matched'::character varying::text, 'user_confirmed'::character varying::text, 'user_created'::character varying::text])", name: "chk_recurring_allocations_source"
+    t.check_constraint "source::text = ANY (ARRAY['auto_matched'::character varying::text, 'user_confirmed'::character varying::text, 'user_created'::character varying::text, 'auto_posted'::character varying::text])", name: "chk_recurring_allocations_source"
     t.check_constraint "state::text = ANY (ARRAY['suggested'::character varying::text, 'confirmed'::character varying::text])", name: "chk_recurring_allocations_state"
   end
 
@@ -1897,6 +1900,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_220129) do
   end
 
   create_table "recurring_occurrences", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "auto_post_approved_at"
     t.datetime "closed_at"
     t.string "closed_source"
     t.datetime "created_at", null: false
@@ -1939,6 +1943,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_220129) do
     t.string "amount_strategy", default: "fixed", null: false
     t.decimal "amount_tolerance_pct", precision: 5, scale: 2, default: "7.5", null: false
     t.date "anchor_date"
+    t.boolean "auto_post"
     t.boolean "autopay", default: false, null: false
     t.string "bill_type", default: "bill", null: false
     t.date "cancelled_on"

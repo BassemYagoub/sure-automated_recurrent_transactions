@@ -466,7 +466,98 @@ class RecurringOccurrencesControllerTest < ActionDispatch::IntegrationTest
     assert occurrence.reload.paid?
   end
 
+  # --- Upcoming tab row actions ---
+
+  test "post_now adds the transaction and settles the cycle" do
+    occurrence = due_occurrence
+
+    assert_difference -> { @series.account.entries.count }, 1 do
+      post post_now_recurring_occurrence_url(occurrence)
+    end
+
+    assert_redirected_to bills_path
+    assert occurrence.reload.paid?
+  end
+
+  test "post_now refuses a cycle that is not due yet" do
+    assert_difference -> { @series.account.entries.count }, 0 do
+      post post_now_recurring_occurrence_url(@occurrence)
+    end
+
+    assert_equal I18n.t("recurring_occurrences.post_now.failure.not_due"), flash[:alert]
+    assert @occurrence.reload.scheduled?
+  end
+
+  test "approve stamps the cycle without writing anything to the ledger" do
+    assert_difference -> { @series.account.entries.count }, 0 do
+      post approve_recurring_occurrence_url(@occurrence)
+    end
+
+    assert @occurrence.reload.auto_post_approved?
+    assert @occurrence.scheduled?, "approval is not a payment"
+  end
+
+  test "unapprove clears the stamp" do
+    @occurrence.approve_auto_post!
+
+    delete unapprove_recurring_occurrence_url(@occurrence)
+
+    assert_not @occurrence.reload.auto_post_approved?
+  end
+
+  # The Upcoming tab is not preview-gated, so its row actions must not be
+  # either -- otherwise the buttons render for everyone and work for no one.
+  test "the upcoming row actions work without preview features" do
+    @user.update!(preferences: (@user.preferences || {}).merge("preview_features_enabled" => false))
+    occurrence = due_occurrence
+
+    post approve_recurring_occurrence_url(@occurrence)
+    assert @occurrence.reload.auto_post_approved?
+
+    post post_now_recurring_occurrence_url(occurrence)
+    assert occurrence.reload.paid?
+
+    post skip_recurring_occurrence_url(@occurrence)
+    assert @occurrence.reload.skipped?
+  end
+
+  test "the upcoming row actions still respect the family switch" do
+    @family.update!(recurring_transactions_disabled: true)
+
+    post approve_recurring_occurrence_url(@occurrence)
+
+    assert_redirected_to root_path
+    assert_not @occurrence.reload.auto_post_approved?
+  end
+
+  # credit_card is the read-only share in the fixtures, same as the existing
+  # mutation test above.
+  test "a read-only account share cannot post or approve" do
+    occurrence = credit_card_occurrence
+
+    member = users(:family_member)
+    sign_in member
+
+    assert_difference -> { accounts(:credit_card).entries.count }, 0 do
+      post post_now_recurring_occurrence_url(occurrence)
+    end
+    assert_response :not_found
+
+    post approve_recurring_occurrence_url(occurrence)
+    assert_response :not_found
+    assert_not occurrence.reload.auto_post_approved?
+  end
+
   private
+    def due_occurrence
+      @series.recurring_occurrences.create!(
+        family: @family,
+        original_due_on: Date.current,
+        due_on: Date.current,
+        currency: "USD"
+      )
+    end
+
     def credit_card_occurrence
       series = @family.recurring_transactions.create!(
         name: "Card Annual Fee", account: accounts(:credit_card), amount: 95,

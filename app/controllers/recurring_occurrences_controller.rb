@@ -3,9 +3,18 @@ class RecurringOccurrencesController < ApplicationController
 
   layout "settings"
 
-  before_action :ensure_recurring_enabled
+  # The row actions the Upcoming tab on /transactions drives. That tab is not
+  # preview-gated -- it predates the Bills workspace -- so these carry the
+  # family switch and the per-account write check, but not the preview gate.
+  # Same split RecurringTransactionsController already makes for the actions
+  # that predate Bills.
+  UPCOMING_ACTIONS = %i[post_now approve unapprove skip].freeze
+
+  before_action :ensure_recurring_enabled, except: UPCOMING_ACTIONS
+  before_action :ensure_recurring_available, only: UPCOMING_ACTIONS
   before_action :set_occurrence
-  before_action :ensure_series_writable, only: %i[mark_paid skip reopen snooze override_amount]
+  before_action :ensure_series_writable,
+                only: %i[mark_paid skip reopen snooze override_amount post_now approve unapprove]
 
   # The dialog is delivered into the shared <turbo-frame id="modal"> (see
   # RecurringTransactionsController#edit for the two-frames trap).
@@ -51,7 +60,42 @@ class RecurringOccurrencesController < ApplicationController
     redirect_after_action t(".success")
   end
 
+  # Writes the entry for a cycle that is already due. Clicking this is itself
+  # the opt-in, so it does not ask whether the series auto-posts.
+  def post_now
+    auto_poster.post_occurrence!(@occurrence)
+    redirect_after_action t(".success")
+  rescue RecurringTransaction::AutoPoster::NotPostable => e
+    redirect_after_action t(".failure.#{e.reason}", default: t(".failure.generic")), alert: true
+  rescue ActiveRecord::RecordNotUnique
+    # A nightly run posted it between the page render and this click.
+    redirect_after_action t(".failure.already_paid"), alert: true
+  end
+
+  # A future cycle cannot be written today -- the app refuses future-dated
+  # transactions, and a future entry would drag the account's balance with it --
+  # so approving stamps the row and the nightly poster acts on its due date.
+  def approve
+    @occurrence.approve_auto_post!
+    redirect_after_action t(".success", date: l(@occurrence.effective_due_on, format: :long))
+  end
+
+  def unapprove
+    @occurrence.unapprove_auto_post!
+    redirect_after_action t(".success")
+  end
+
   private
+    def auto_poster
+      RecurringTransaction::AutoPoster.new(Current.family)
+    end
+
+    # The family switch on its own, without the preview gate that
+    # ensure_recurring_enabled also applies.
+    def ensure_recurring_available
+      redirect_to root_path if Current.family.recurring_transactions_disabled?
+    end
+
     def set_occurrence
       @occurrence = Current.family.recurring_occurrences
                            .joins(:recurring_transaction)
@@ -76,7 +120,10 @@ class RecurringOccurrencesController < ApplicationController
 
     def redirect_after_action(message, alert: false)
       flash[alert ? :alert : :notice] = message
-      target = bills_path
+      # These actions now have two callers -- the Bills workspace and the
+      # Upcoming tab on /transactions -- so the row returns to wherever it was
+      # clicked instead of always landing on Bills.
+      target = safe_return_path(fallback: bills_path)
 
       respond_to do |format|
         format.html { redirect_to target }

@@ -75,6 +75,13 @@ class RecurringTransactionsController < ApplicationController
         redirect_to recurring_transactions_path
       end
     end
+  rescue ActiveRecord::RecordInvalid
+    respond_to do |format|
+      format.html do
+        flash[:alert] = t("recurring_transactions.settings_invalid")
+        redirect_to recurring_transactions_path
+      end
+    end
   end
 
   def identify
@@ -359,7 +366,7 @@ class RecurringTransactionsController < ApplicationController
     # raw permit.
     def recurring_transaction_params
       params.require(:recurring_transaction).permit(
-        :payment_url, :autopay, :notes, :bill_type, :category_id,
+        :payment_url, :autopay, :auto_post_choice, :notes, :bill_type, :category_id,
         :renews_on, :trial_ends_on, :cancelled_on, :end_after_count,
         :frequency_preset, :frequency_day_of_month, :frequency_second_day_of_month,
         :frequency_weekday, :frequency_month_of_year
@@ -498,7 +505,28 @@ class RecurringTransactionsController < ApplicationController
       end
     end
 
+    # The settings page submits one control per form, so a key that was not
+    # sent must be left alone. Building the hash from whichever keys arrived
+    # keeps the auto-post fields from being written as false/nil every time
+    # someone toggles the unrelated switch above them.
     def recurring_settings_params
-      { recurring_transactions_disabled: params[:recurring_transactions_disabled] == "true" }
+      settings = {}
+
+      if params.key?(:recurring_transactions_disabled)
+        settings[:recurring_transactions_disabled] = params[:recurring_transactions_disabled] == "true"
+      end
+
+      if params.key?(:recurring_auto_post_enabled)
+        settings[:recurring_auto_post_enabled] = params[:recurring_auto_post_enabled] == "true"
+      end
+
+      if params.key?(:recurring_auto_post_hour)
+        # Integer() rather than to_i: "abc".to_i is 0, a perfectly valid hour,
+        # so coercing would silently move the family's posting to midnight.
+        # nil fails Family's inclusion validation, which is what surfaces it.
+        settings[:recurring_auto_post_hour] = Integer(params[:recurring_auto_post_hour], exception: false)
+      end
+
+      settings
     end
 end

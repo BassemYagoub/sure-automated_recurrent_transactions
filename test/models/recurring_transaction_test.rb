@@ -1513,6 +1513,45 @@ class RecurringTransactionTest < ActiveSupport::TestCase
     assert_equal 0, series.cycles_overdue, "one day late is not one cycle missed"
   end
 
+  # --- Auto-post eligibility ---
+
+  test "auto_post_enabled? follows the family default until the series overrides it" do
+    series = build_recurring
+    series.save!
+
+    @family.update!(recurring_auto_post_enabled: false)
+    assert_nil series.auto_post
+    assert_not series.reload.auto_post_enabled?
+
+    @family.update!(recurring_auto_post_enabled: true)
+    assert series.reload.auto_post_enabled?, "a NULL override inherits the default"
+
+    series.update!(auto_post: false)
+    assert_not series.reload.auto_post_enabled?, "an explicit opt-out beats the default"
+
+    @family.update!(recurring_auto_post_enabled: false)
+    series.update!(auto_post: true)
+    assert series.reload.auto_post_enabled?, "an explicit opt-in beats the default"
+  end
+
+  test "auto_postable_shape? rejects linked accounts, transfers and accountless series" do
+    assert build_recurring.auto_postable_shape?
+    assert_not build_recurring(account: accounts(:connected)).auto_postable_shape?
+    assert_not build_recurring(account: nil).auto_postable_shape?
+    assert_not build_recurring(destination_account: accounts(:credit_card)).auto_postable_shape?
+  end
+
+  test "auto_post_choice stores NULL when the choice agrees with the family default" do
+    @family.update!(recurring_auto_post_enabled: true)
+    series = build_recurring
+    series.auto_post_choice = "1"
+
+    assert_nil series.auto_post, "agreeing with the default keeps the series inheriting it"
+
+    series.auto_post_choice = "0"
+    assert_equal false, series.auto_post
+  end
+
   private
 
     def stale_hint_series

@@ -33,6 +33,7 @@ class RecurringOccurrence < ApplicationRecord
   scope :open_status, -> { where(status: :scheduled) }
   scope :closed, -> { where.not(status: :scheduled) }
   scope :due_between, ->(from, to) { where(due_on: from..to) }
+  scope :auto_post_approved, -> { where.not(auto_post_approved_at: nil) }
 
   # The amount this occurrence expects, resolving NULL through the series'
   # amount strategy, which is what lets a price edit update every open
@@ -56,6 +57,21 @@ class RecurringOccurrence < ApplicationRecord
 
   def resolved_expected_amount_money
     Money.new(resolved_expected_amount, currency)
+  end
+
+  # The amount as a ledger entry would carry it: the positive magnitude above,
+  # re-signed from the series, because Sure records an inflow as a negative
+  # amount. One definition, shared by the poster that writes the entry and the
+  # Upcoming tab that previews it, so the two can never disagree about sign.
+  def signed_expected_amount
+    series = recurring_transaction
+    magnitude = resolved_expected_amount(series_amount: series.amount)
+
+    series.amount.negative? ? -magnitude : magnitude
+  end
+
+  def signed_expected_amount_money
+    Money.new(signed_expected_amount, currency)
   end
 
   # Snoozing postpones the presentation-level due date without rewriting the
@@ -141,6 +157,60 @@ class RecurringOccurrence < ApplicationRecord
 
   def snooze!(until_date)
     update!(snoozed_until: until_date)
+  end
+
+  # --- Auto-post approval. Clearing one future cycle to post on its due date,
+  # independently of whether its series auto-posts. Nothing is written to the
+  # ledger here: the poster acts on the stamp when the date arrives. ---
+
+  def auto_post_approved?
+    auto_post_approved_at.present?
+  end
+
+  def approve_auto_post!
+    update!(auto_post_approved_at: Time.current)
+  end
+
+  def unapprove_auto_post!
+    update!(auto_post_approved_at: nil)
+  end
+
+  # Whether the poster would act on this row today, which is also what decides
+  # whether the Upcoming tab offers "post now" or "approve". Snooze-aware,
+  # because a snoozed occurrence is not due however old its `due_on` is.
+  def postable_now?
+    scheduled? && effective_due_on <= Date.current
+  end
+
+  # The primary action the Upcoming tab should offer for this row. Derived here
+  # rather than in the view so the template stays free of the sign, snooze and
+  # toggle rules behind it.
+  #
+  #   :post      -- due now; write the entry
+  #   :approve   -- still future; clear it to post on its own date
+  #   :unapprove -- still future and already cleared
+  #   :automatic -- the series posts by itself, nothing to decide
+  #   nil        -- this surface has no action to offer
+  #
+  # A row that is due wins over :automatic on purpose: the nightly run may be
+  # hours away, and "post it now" is a reasonable thing to want in the meantime.
+  # Posting closes the occurrence, so the later run simply finds nothing.
+  def auto_post_action
+    return nil unless scheduled?
+    return nil unless recurring_transaction.auto_postable_shape?
+    # A payment already on the row means a real charge is in play, matched or
+    # merely suggested. Offering to post beside it would double-count the bill.
+    return nil if allocations.any?
+
+    if postable_now?
+      :post
+    elsif recurring_transaction.auto_post_enabled?
+      :automatic
+    elsif auto_post_approved?
+      :unapprove
+    else
+      :approve
+    end
   end
 
   def override_amount!(amount)

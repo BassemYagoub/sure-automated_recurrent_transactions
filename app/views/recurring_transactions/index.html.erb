@@ -40,6 +40,50 @@
   </div>
 
   <% unless @family.recurring_transactions_disabled? %>
+    <div class="bg-container rounded-xl shadow-border-xs p-4 space-y-4">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-sm font-medium text-primary"><%= t("recurring_transactions.settings.auto_post_label") %></p>
+          <p class="text-xs text-secondary"><%= t("recurring_transactions.settings.auto_post_description") %></p>
+        </div>
+        <%= form_with url: update_settings_recurring_transactions_path, method: :patch, data: { turbo_frame: "_top", controller: "auto-submit-form" } do |f| %>
+          <%= f.hidden_field :recurring_auto_post_enabled, value: @family.recurring_auto_post_enabled? ? "false" : "true" %>
+          <%= render DS::Toggle.new(
+            id: "recurring_auto_post_enabled",
+            name: "toggle_auto_post",
+            checked: @family.recurring_auto_post_enabled?,
+            data: { auto_submit_form_target: "auto" }
+          ) %>
+        <% end %>
+      </div>
+
+      <%# The hour still matters when the default above is off: a single series
+          can opt in by hand, and an individual cycle can be approved from the
+          Upcoming tab. So this is never hidden behind the toggle. %>
+      <div class="flex items-center justify-between gap-4 border-t border-primary pt-4">
+        <div>
+          <p class="text-sm font-medium text-primary"><%= t("recurring_transactions.settings.auto_post_hour_label") %></p>
+          <p class="text-xs text-secondary"><%= t("recurring_transactions.settings.auto_post_hour_description") %></p>
+        </div>
+        <%# An explicit submit rather than auto-submit: DS::Select writes its
+            value into a hidden input, which never fires the blur the
+            auto-submit controller would listen for on one. %>
+        <%= form_with url: update_settings_recurring_transactions_path, method: :patch, data: { turbo_frame: "_top" }, class: "flex items-end gap-2" do |f| %>
+          <%= render DS::Select.new(
+            form: f,
+            method: :recurring_auto_post_hour,
+            items: auto_post_hour_options,
+            selected: @family.recurring_auto_post_hour.to_s
+          ) %>
+          <%= render DS::Button.new(
+            text: t("recurring_transactions.settings.auto_post_hour_save"),
+            variant: "outline",
+            type: "submit"
+          ) %>
+        <% end %>
+      </div>
+    </div>
+
     <div class="p-4 bg-container-inset border border-secondary rounded-lg">
       <div class="flex items-start gap-2">
         <%= icon "info", class: "w-5 h-5 text-link mt-0.5 flex-shrink-0" %>

@@ -39,4 +39,13 @@ module RecurringTransactionsHelper
   def frequency_month_options
     t("date.month_names").compact.each_with_index.map { |name, index| [ name, index + 1 ] }
   end
+
+  # The hours a family can pick for its nightly auto-post run, as DS::Select
+  # items. Values are strings because that is what comes back from the form,
+  # and DS::Select marks the selected item by comparing values directly.
+  def auto_post_hour_options
+    (0..23).map do |hour|
+      { value: hour.to_s, label: format("%02d:00", hour) }
+    end
+  end
 end

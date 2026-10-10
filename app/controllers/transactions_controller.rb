@@ -79,17 +79,7 @@ class TransactionsController < ApplicationController
       Current.accessible_entries.uncategorized_transactions.count
     end
 
-    # Load projected recurring transactions for next 10 days
-    @projected_recurring = Rails.cache.fetch(projected_recurring_cache_key, expires_in: 1.day) do
-      Current.family.recurring_transactions
-                    .accessible_by(Current.user)
-                    .active
-                    .where("next_expected_date <= ? AND next_expected_date >= ?",
-                           10.days.from_now.to_date,
-                           Date.current)
-                    .includes(:merchant)
-                    .to_a
-    end
+    @upcoming_occurrences = upcoming_occurrences
 
     @breadcrumbs = [ [ t("breadcrumbs.home"), root_path ], [ t("breadcrumbs.transactions"), nil ] ]
   end
@@ -483,18 +473,38 @@ class TransactionsController < ApplicationController
         "#{Current.family.entries_version}/#{Current.family.accounts_status_version}/#{Current.account_share_version}"
     end
 
-    # Scoped additionally by Date.current since the "next 10 days" window is
-    # date-dependent and would otherwise return a stale window on a cache hit
-    # from an earlier day.
+    # How far ahead the Upcoming tab looks. Comfortably inside
+    # OccurrenceGenerator::HORIZON_DAYS, so everything in this window is already
+    # materialized and no generator run is needed to fill the list.
+    UPCOMING_HORIZON_DAYS = 30
+
+    # One row per expected cycle rather than per series, because the row's
+    # actions -- post, approve, skip -- each settle a single cycle.
     #
-    # Includes Family#recurring_transaction_merchants_version because the
-    # cached records are preloaded with :merchant and rendered with its
-    # name/logo, but editing a FamilyMerchant or a shared ProviderMerchant
-    # doesn't touch `recurring_transactions`.
-    def projected_recurring_cache_key
-      "transactions_projected_recurring/v5/#{Current.family.id}/#{Current.user.id}/#{Date.current}/" \
-        "#{Current.family.recurring_transactions_version}/#{Current.family.accounts_status_version}/" \
-        "#{Current.family.recurring_transaction_merchants_version}/#{Current.account_share_version}"
+    # Deliberately not cached, unlike the projection this replaces: every row
+    # now carries mutable state (approval stamps, payments landing from a sync)
+    # and a cached list of action buttons goes stale the moment one is clicked.
+    # The query is bounded to 30 days and served by
+    # index_recurring_occurrences_on_family_id_and_status_and_due_on.
+    def upcoming_occurrences
+      return [] if Current.family.recurring_transactions_disabled?
+
+      Current.family.recurring_occurrences
+             .open_status
+             .where(due_on: Date.current..UPCOMING_HORIZON_DAYS.days.from_now.to_date)
+             .joins(:recurring_transaction)
+             .merge(RecurringTransaction.accessible_by(Current.user).active)
+             # Everything RecurringOccurrence#auto_post_action reads, so
+             # deciding each row's button costs no query: :allocations (a
+             # suggested payment means a real charge is already in play),
+             # :account_providers (Account#manual?) and :family (the auto-post
+             # default a NULL series override inherits).
+             .includes(
+               :allocations,
+               recurring_transaction: [ :merchant, :family, { account: :account_providers } ]
+             )
+             .order(:due_on)
+             .to_a
     end
 
     # The "Mark as Recurring" block is only ever rendered under these same

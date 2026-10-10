@@ -1,0 +1,98 @@
+<%# locals: (occurrence:) %>
+<% series = occurrence.recurring_transaction %>
+
+<div id="<%= dom_id(occurrence, :upcoming) %>"
+     class="flex flex-wrap lg:grid lg:grid-cols-12 items-center gap-y-2 text-primary text-sm font-medium p-3 lg:px-5 lg:py-4">
+
+  <div class="order-1 col-span-4 flex items-center gap-3 lg:gap-4 min-w-0 grow lg:grow-0">
+    <% if series.merchant&.logo_url.present? %>
+      <%= image_tag Setting.transform_brand_fetch_url(series.merchant.logo_url),
+            class: "w-9 h-9 rounded-full shrink-0",
+            loading: "lazy" %>
+    <% else %>
+      <%= render DS::FilledIcon.new(
+            variant: :text,
+            text: series.display_name.to_s,
+            size: "lg",
+            rounded: true
+          ) %>
+    <% end %>
+
+    <div class="truncate">
+      <p class="truncate"><%= series.display_name %></p>
+      <p class="text-secondary text-xs font-normal lg:hidden">
+        <%= l(occurrence.effective_due_on, format: :long) %>
+      </p>
+    </div>
+  </div>
+
+  <div class="order-2 col-span-2 lg:justify-self-end shrink-0 privacy-sensitive">
+    <%= content_tag :p,
+          format_money(-occurrence.signed_expected_amount_money),
+          class: [ "font-medium", occurrence.signed_expected_amount.negative? ? "text-success" : "text-subdued" ] %>
+  </div>
+
+  <p class="order-4 lg:order-3 col-span-1 lg:justify-self-center text-secondary text-xs lg:text-sm font-normal">
+    <span class="lg:hidden"><%= t(".expected_day_label") %></span>
+    <%= series.expected_day_of_month %>
+  </p>
+
+  <p class="order-5 lg:order-4 col-span-2 lg:justify-self-center text-secondary text-xs lg:text-sm font-normal hidden lg:block">
+    <%= l(occurrence.effective_due_on, format: :long) %>
+  </p>
+
+  <p class="order-6 lg:order-5 col-span-2 lg:justify-self-center text-secondary text-xs lg:text-sm font-normal">
+    <span class="lg:hidden"><%= t(".last_occurrence_label") %></span>
+    <%= series.last_occurrence_date ? l(series.last_occurrence_date, format: :long) : t(".never") %>
+  </p>
+
+  <div class="order-3 lg:order-6 col-span-1 flex items-center justify-end gap-1 ml-auto lg:ml-0 shrink-0">
+    <% action = occurrence.auto_post_action %>
+    <% if action == :post %>
+      <%= render DS::Link.new(
+            icon: "check",
+            variant: "accent",
+            size: "sm",
+            href: post_now_recurring_occurrence_path(occurrence),
+            method: :post,
+            title: t(".post_now"),
+            aria: { label: t(".post_now_aria", name: series.display_name) }
+          ) %>
+    <% elsif action == :approve %>
+      <%= render DS::Link.new(
+            icon: "check",
+            variant: "outline",
+            size: "sm",
+            href: approve_recurring_occurrence_path(occurrence),
+            method: :post,
+            title: t(".approve"),
+            aria: { label: t(".approve_aria", name: series.display_name) }
+          ) %>
+    <% elsif action == :unapprove %>
+      <%= render DS::Link.new(
+            icon: "check-check",
+            variant: "ghost",
+            size: "sm",
+            href: unapprove_recurring_occurrence_path(occurrence),
+            method: :delete,
+            title: t(".approved"),
+            aria: { label: t(".unapprove_aria", name: series.display_name) }
+          ) %>
+    <% elsif action == :automatic %>
+      <span class="inline-flex items-center px-2 py-1 text-secondary" title="<%= t(".automatic") %>">
+        <%= icon "refresh-cw", size: "sm", color: "current" %>
+      </span>
+    <% end %>
+
+    <%= render DS::Link.new(
+          icon: "x",
+          variant: "icon",
+          size: "sm",
+          href: skip_recurring_occurrence_path(occurrence),
+          method: :post,
+          title: t(".skip"),
+          aria: { label: t(".skip_aria", name: series.display_name) },
+          data: { turbo_confirm: t(".skip_confirm", name: series.display_name) }
+        ) %>
+  </div>
+</div>

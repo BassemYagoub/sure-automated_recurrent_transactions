@@ -234,6 +234,24 @@ en:
       drag_drop_subtitle: Upload transactions directly
       transaction: transaction
       transactions: transactions
+    upcoming_row:
+      expected_day_label: "Day"
+      last_occurrence_label: "Last"
+      never: "—"
+      post_now: Add now
+      post_now_aria: "Add %{name} to transactions now"
+      approve: Add on its due date
+      approve_aria: "Approve %{name} to be added on its due date"
+      approved: Approved. Click to undo.
+      unapprove_aria: "Stop %{name} from being added automatically"
+      automatic: Added automatically on its due date
+      skip: Skip this one
+      skip_aria: "Skip this %{name} cycle"
+      skip_confirm: "Skip this cycle of %{name}? The bill itself stays, and the next cycle is unaffected."
+    upcoming_settings_hint:
+      title: Turning this on and off
+      description: Which bills are added automatically, and when, is set under Recurring transactions.
+      cta: Open settings
     toggle_recurring_section: Toggle upcoming recurring transactions
     search:
       filters:

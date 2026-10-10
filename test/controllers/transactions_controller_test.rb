@@ -1314,7 +1314,7 @@ end
                  "Expected transfer counterparty accounts to be preloaded"
   end
 
-  test "index caches uncategorized_count and projected_recurring across requests" do
+  test "index caches uncategorized_count across requests" do
     # Test environment uses null_store; swap in a memory store so the cache
     # actually persists between the two requests below.
     original_cache = Rails.cache
@@ -1330,12 +1330,6 @@ end
     # appears in the generated SQL -- match the COUNT query it produces instead.
     assert_empty queries.select { |q| q =~ /SELECT COUNT/i && q =~ /category_id.*IS NULL/i },
       "second request with unchanged data should reuse the cached uncategorized count"
-    # Building the cache key itself still runs small COUNT/MAX queries against
-    # recurring_transactions (Family#recurring_transactions_version and
-    # #recurring_transaction_merchants_version), so match the projection query
-    # the cached block itself would run instead of the whole table name.
-    assert_empty queries.grep(/next_expected_date/i),
-      "second request with unchanged data should reuse the cached projected recurring lookup"
   ensure
     Rails.cache = original_cache
   end
@@ -1422,7 +1416,7 @@ end
     Rails.cache = original_cache
   end
 
-  test "index projected_recurring cache is invalidated when account-share access is revoked" do
+  test "index upcoming list drops a series when account-share access is revoked" do
     original_cache = Rails.cache
     Rails.cache = ActiveSupport::Cache::MemoryStore.new
 
@@ -1432,28 +1426,30 @@ end
     assert_equal share.account_id, recurring.account_id,
       "fixture assumption: the shared depository account has the netflix recurring charge"
 
+    upcoming_occurrence(recurring)
     merchant_name_pattern = /#{Regexp.escape(recurring.merchant.name)}/
 
     sign_in member
     get transactions_url
     assert_match merchant_name_pattern, response.body,
-      "the member should see the shared account's recurring transaction before revocation"
+      "the member should see the shared account's upcoming cycle before revocation"
 
     share.destroy!
 
     get transactions_url
     assert_no_match merchant_name_pattern, response.body,
-      "revoking account-share access must not leave a stale cached projected-recurring list"
+      "revoking account-share access must drop the series from the upcoming list"
   ensure
     Rails.cache = original_cache
   end
 
-  test "index projected_recurring cache reflects a merchant rename immediately" do
+  test "index upcoming list reflects a merchant rename immediately" do
     original_cache = Rails.cache
     Rails.cache = ActiveSupport::Cache::MemoryStore.new
 
     recurring = recurring_transactions(:netflix_subscription)
     merchant = recurring.merchant
+    upcoming_occurrence(recurring)
 
     get transactions_url
     assert_match(/#{Regexp.escape(merchant.name)}/, response.body,
@@ -1463,12 +1459,12 @@ end
 
     get transactions_url
     assert_match(/Netflix Renamed/, response.body,
-      "renaming the merchant must not leave a stale cached projected-recurring list")
+      "renaming the merchant must show through on the upcoming list")
   ensure
     Rails.cache = original_cache
   end
 
-  test "index projected_recurring cache reflects a provider merchant update immediately" do
+  test "index upcoming list reflects a provider merchant update immediately" do
     original_cache = Rails.cache
     Rails.cache = ActiveSupport::Cache::MemoryStore.new
 
@@ -1478,6 +1474,7 @@ end
     provider_merchant = ProviderMerchant.create!(name: "Provider Merchant Original", source: "enable_banking")
     recurring = recurring_transactions(:netflix_subscription)
     recurring.update!(merchant: provider_merchant, name: nil)
+    upcoming_occurrence(recurring)
 
     get transactions_url
     assert_match(/Provider Merchant Original/, response.body,
@@ -1487,9 +1484,38 @@ end
 
     get transactions_url
     assert_match(/Provider Merchant Renamed/, response.body,
-      "updating the provider merchant must not leave a stale cached projected-recurring list")
+      "updating the provider merchant must show through on the upcoming list")
   ensure
     Rails.cache = original_cache
+  end
+
+  # The Upcoming tab lists materialized occurrences, so a series alone puts
+  # nothing on the page -- every test about that list needs a cycle to show.
+  def upcoming_occurrence(series, due_on: 5.days.from_now.to_date)
+    series.recurring_occurrences.create!(
+      family: series.family,
+      original_due_on: due_on,
+      due_on: due_on,
+      currency: series.currency,
+      status: "scheduled"
+    )
+  end
+
+  test "index upcoming list shows only open cycles inside the horizon" do
+    recurring = recurring_transactions(:netflix_subscription)
+    recurring.recurring_occurrences.delete_all
+
+    inside = upcoming_occurrence(recurring, due_on: 5.days.from_now.to_date)
+    beyond = upcoming_occurrence(recurring, due_on: 60.days.from_now.to_date)
+    settled = upcoming_occurrence(recurring, due_on: 10.days.from_now.to_date)
+    settled.close!("paid", source: "user")
+
+    get transactions_url
+    assert_response :success
+
+    assert_match dom_id(inside, :upcoming), response.body
+    assert_no_match(/#{dom_id(beyond, :upcoming)}/, response.body, "a cycle past the 30-day horizon stays off the list")
+    assert_no_match(/#{dom_id(settled, :upcoming)}/, response.body, "a settled cycle is not upcoming")
   end
 
   test "index uncategorized_count cache reflects deleting an uncategorized transaction immediately" do

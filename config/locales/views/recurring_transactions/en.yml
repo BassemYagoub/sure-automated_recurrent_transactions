@@ -86,6 +86,8 @@ en:
       payment_url_hint: Where you go to pay this bill. Opens in a new tab from your recurring and upcoming lists.
       autopay_label: Pays automatically
       autopay_hint: Keep it on your bills list, but stop treating it as something to do.
+      auto_post_label: Add the transaction automatically
+      auto_post_hint: On its due date, add this to your transactions without asking. You can still edit or delete it afterwards.
       more_options: More options
       notes_label: Notes
       notes_placeholder: Account 4821, charged to the Amex
@@ -141,7 +143,13 @@ en:
     settings:
       enable_label: Enable Recurring Transactions
       enable_description: Automatically detect recurring transaction patterns and show upcoming projected transactions.
+      auto_post_label: Add recurring transactions automatically
+      auto_post_description: The default for new and existing bills on manual accounts. Each bill can override it, and nothing is ever added before its due date.
+      auto_post_hour_label: Time of day
+      auto_post_hour_description: When the daily run adds due transactions, in your own timezone.
+      auto_post_hour_save: Save
     settings_updated: Recurring transactions settings updated
+    settings_invalid: Those settings could not be saved
     info:
       title: Automatic Pattern Detection
       manual_description: You can manually identify patterns or clean up stale recurring transactions using the buttons above.
@@ -170,6 +178,7 @@ en:
       merchant: Name
       amount: Amount
       frequency: Frequency
+      expected_day: Day
       next_date: Next Date
       last_occurrence: Last Occurrence
       status: Status
