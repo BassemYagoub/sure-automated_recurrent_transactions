@@ -1789,6 +1789,64 @@ class Family::DataImporterTest < ActiveSupport::TestCase
     assert_equal 5000.0, budget.expected_income.to_f
   end
 
+  test "imports a budget into the month's existing budget instead of failing" do
+    existing = @family.budgets.create!(
+      start_date: Date.parse("2024-01-01"),
+      end_date: Date.parse("2024-01-31"),
+      currency: "USD"
+    )
+
+    ndjson = build_ndjson([
+      {
+        type: "Budget",
+        data: {
+          id: "budget-1",
+          start_date: "2024-01-01",
+          end_date: "2024-01-31",
+          budgeted_spending: "3000.00",
+          expected_income: "5000.00",
+          currency: "USD"
+        }
+      }
+    ])
+
+    Family::DataImporter.new(@family, ndjson).import!
+
+    assert_equal [ existing.id ], @family.budgets.pluck(:id)
+    existing.reload
+    assert_equal 3000.0, existing.budgeted_spending.to_f
+    assert_equal 5000.0, existing.expected_income.to_f
+  end
+
+  test "imports a budget beside a member's personal budget for the same month" do
+    personal = @family.budgets.create!(
+      user: users(:empty),
+      start_date: Date.parse("2024-01-01"),
+      end_date: Date.parse("2024-01-31"),
+      budgeted_spending: 100,
+      currency: "USD"
+    )
+
+    ndjson = build_ndjson([
+      {
+        type: "Budget",
+        data: {
+          id: "budget-1",
+          start_date: "2024-01-01",
+          end_date: "2024-01-31",
+          budgeted_spending: "3000.00",
+          currency: "USD"
+        }
+      }
+    ])
+
+    Family::DataImporter.new(@family, ndjson).import!
+
+    assert_equal 100.0, personal.reload.budgeted_spending.to_f
+    shared = @family.budgets.where(user_id: nil)
+    assert_equal [ 3000.0 ], shared.map { |budget| budget.budgeted_spending.to_f }
+  end
+
   test "imports budget_categories" do
     ndjson = build_ndjson([
       {

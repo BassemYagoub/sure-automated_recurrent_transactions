@@ -1264,13 +1264,19 @@ class Family::DataImporter
 
         require_source_id!("Budget", old_id)
 
+        start_date = Date.parse(data["start_date"].to_s)
+        end_date = Date.parse(data["end_date"].to_s)
+
+        # Opening Budgets bootstraps the current month, so the month may already
+        # exist under another id. Budgets are unique per month: reuse it.
         budget = mapped_record(:budgets, old_id, @family.budgets, record_type: "Budget")
+        budget ||= @family.budgets.find_by(start_date: start_date, end_date: end_date, user_id: nil)
         created = budget.blank?
         budget ||= @family.budgets.build
 
         budget.assign_attributes(
-          start_date: Date.parse(data["start_date"].to_s),
-          end_date: Date.parse(data["end_date"].to_s),
+          start_date: start_date,
+          end_date: end_date,
           budgeted_spending: data["budgeted_spending"]&.to_d,
           expected_income: data["expected_income"]&.to_d,
           currency: data["currency"] || @family.currency
