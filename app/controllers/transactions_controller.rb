@@ -512,17 +512,21 @@ class TransactionsController < ApplicationController
     # One row per expected cycle rather than per series, because the row's
     # actions -- post, approve, skip -- each settle a single cycle.
     #
+    # Every unpaid past cycle is listed too, oldest first and with no age
+    # limit, like the Bills workspace: a cycle the run did not post (series not
+    # opted in, outside the run's reach) can still be posted from here.
+    #
     # Deliberately not cached, unlike the projection this replaces: every row
     # now carries mutable state (approval stamps, payments landing from a sync)
     # and a cached list of action buttons goes stale the moment one is clicked.
-    # The query is bounded to 30 days and served by
+    # The query is bounded 30 days ahead, open cycles only, and served by
     # index_recurring_occurrences_on_family_id_and_status_and_due_on.
     def upcoming_occurrences
       return [] if Current.family.recurring_transactions_disabled?
 
       Current.family.recurring_occurrences
              .open_status
-             .where(due_on: Date.current..UPCOMING_HORIZON_DAYS.days.from_now.to_date)
+             .where(due_on: ..UPCOMING_HORIZON_DAYS.days.from_now.to_date)
              .joins(:recurring_transaction)
              .merge(RecurringTransaction.accessible_by(Current.user).active)
              # Everything RecurringOccurrence#auto_post_action reads, so

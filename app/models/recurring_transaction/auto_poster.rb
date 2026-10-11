@@ -28,9 +28,11 @@ class RecurringTransaction
       end
     end
 
-    # How far back the sweep will reach. Without a bound, switching the feature
-    # on would post every open cycle the family ever accumulated in one run.
-    # A deliberate click is not bounded this way: see post_occurrence!.
+    # How far back the sweep always reaches. Without a bound, switching the
+    # feature on would post every open cycle the family ever accumulated in one
+    # run. The reach stretches back to the last completed run when that is
+    # older (see catch_up_start). A deliberate click is not bounded this way:
+    # see post_occurrence!.
     LOOKBACK_DAYS = 7
 
     ALLOCATION_SOURCE = "auto_posted".freeze
@@ -77,12 +79,22 @@ class RecurringTransaction
       def due_occurrences
         family.recurring_occurrences
               .open_status
-              .where(due_on: (Date.current - LOOKBACK_DAYS)..Date.current)
+              .where(due_on: catch_up_start..Date.current)
               # :family because auto_post_enabled? falls through to the family
               # default; :account_providers because auto_postable_shape? asks
               # Account#manual?, which counts them.
               .includes(:allocations, recurring_transaction: [ :family, { account: :account_providers } ])
               .select { |occurrence| eligible?(occurrence) }
+      end
+
+      # Days a stopped server missed lie between the last completed run and
+      # now, so the sweep reaches back to that run whenever it is older than
+      # the lookback window. A family that never ran gets the window only.
+      def catch_up_start
+        lookback_start = Date.current - LOOKBACK_DAYS
+        last_run_on = family.recurring_auto_post_last_run_at&.to_date
+
+        [ lookback_start, last_run_on ].compact.min
       end
 
       def eligible?(occurrence)

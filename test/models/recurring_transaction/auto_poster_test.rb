@@ -111,6 +111,40 @@ class RecurringTransaction::AutoPosterTest < ActiveSupport::TestCase
     assert_equal 0, Poster.new(@family).run!
   end
 
+  test "posts the lookback window's first day" do
+    occurrence_due(Poster::LOOKBACK_DAYS.days.ago.to_date)
+
+    assert_equal 1, Poster.new(@family).run!
+  end
+
+  test "after an outage, posts every cycle missed since the last run, each on its own date" do
+    @family.update!(recurring_auto_post_last_run_at: 40.days.ago)
+    missed = [ 35, 20, 5 ].map { |days_ago| occurrence_due(days_ago.days.ago.to_date) }
+
+    assert_equal 3, Poster.new(@family).run!
+
+    missed.each(&:reload)
+    assert_equal %w[paid paid paid], missed.map(&:status)
+    assert_equal missed.map(&:due_on), missed.map { |occurrence| occurrence.allocations.sole.entry.date }
+  end
+
+  test "the catch-up reaches the last run's own date but not the day before" do
+    last_run_on = 40.days.ago.to_date
+    @family.update!(recurring_auto_post_last_run_at: last_run_on.in_time_zone.change(hour: 6))
+    on_last_run = occurrence_due(last_run_on)
+    before_last_run = occurrence_due(last_run_on - 1)
+
+    assert_equal 1, Poster.new(@family).run!
+    assert_equal %w[paid scheduled], [ on_last_run, before_last_run ].map { |occurrence| occurrence.reload.status }
+  end
+
+  test "a recent last run still reaches the whole lookback window" do
+    @family.update!(recurring_auto_post_last_run_at: 1.day.ago)
+    occurrence_due(Poster::LOOKBACK_DAYS.days.ago.to_date)
+
+    assert_equal 1, Poster.new(@family).run!
+  end
+
   test "does not post a snoozed occurrence until its snooze expires" do
     occurrence_due(Date.current, snoozed_until: 3.days.from_now.to_date)
 

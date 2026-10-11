@@ -5,7 +5,27 @@ currently tracking `0.7.5-alpha.10`. Upstream changes are not listed here.
 
 ## Unreleased
 
+### Added
+
+- **Missed recurring transactions are caught up** (2026-10-10). A daily run
+  the server was down for happens at the first check after it is back, instead
+  of being skipped. The job checks every 5 minutes, still posts once a day per
+  family, and that run posts every cycle missed since the last completed run,
+  each dated on its own due date. The first run after enabling the feature
+  still reaches back only 7 days.
+  - Migration `20261010120000_add_recurring_auto_post_last_run_to_families`:
+    `families.recurring_auto_post_last_run_at`.
+  - `app/jobs/auto_post_recurring_transactions_job.rb`,
+    `app/models/recurring_transaction/auto_poster.rb`, `config/schedule.yml`,
+    `docs/hosting/recurring-bills.md`, and their tests.
+
 ### Fixed
+
+- **The Upcoming tab lists overdue cycles** (2026-10-10). Every unpaid past
+  cycle appears, oldest first, ahead of the next 30 days, with "Add now" to
+  post it. Before, the tab started at today, so a cycle that slipped past its
+  date could not be posted from it.
+  - `app/controllers/transactions_controller.rb` and its test.
 
 - **Sure (NDJSON) import no longer fails on a month the family already has a
   budget for** (2026-10-10). Opening the Budgets page creates the current
@@ -34,17 +54,16 @@ currently tracking `0.7.5-alpha.10`. Upstream changes are not listed here.
     from its own feed.
   - A family default (off unless enabled), with a per-series override that can
     force it on or off.
-  - A per-family run hour, read in the family's own timezone. The job runs
-    hourly and posts for each family when its chosen hour arrives, reaching back
-    at most 7 days.
+  - A per-family run hour, read in the family's own timezone (see the catch-up
+    entry above for runs the server misses).
   - The Upcoming tab on `/transactions` lists each expected cycle in the next 30
     days (name, amount, expected day, next date, last occurrence) with a link to
     the recurring settings. Each row offers:
 
     | Row | Button | Effect |
     | --- | --- | --- |
-    | Due today | Post now | Writes the entry dated on its due date and marks the cycle paid |
-    | Due later | Approve | The nightly job posts it on its due date; nothing is written today |
+    | Due today or overdue | Add now | Writes the entry dated on its due date and marks the cycle paid |
+    | Due later | Add on its due date | The daily run posts it on its due date; nothing is written today |
     | Due later, approved | Approved | Click to undo the approval |
     | Series already auto-posts | (icon) | Nothing to decide |
     | Any | Skip | Skips that cycle |
@@ -62,10 +81,6 @@ currently tracking `0.7.5-alpha.10`. Upstream changes are not listed here.
     - Recurring transfers are not posted (they need a paired inflow and outflow).
     - The per-series toggle is not shown on the new-bill dialog, so a new bill
       follows the family default until edited.
-    - Overdue cycles do not appear on the Upcoming tab, which starts at today.
-      The nightly job still posts them within its 7-day reach when the series or
-      cycle opted in, but a cycle that did not opt in cannot be posted from this
-      tab once its date has passed.
 
 ### Documentation
 

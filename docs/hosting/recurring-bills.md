@@ -68,10 +68,14 @@ Three controls decide what posts:
   occurrence so the run posts it when its date arrives. A cycle that is
   already due gets an "Add now" button instead, which writes it immediately.
 
-The daily run reaches back at most 7 days, so enabling the feature on an
-instance with a long backlog does not post every open cycle it has ever
-accumulated. Cycles older than that stay open, and the Upcoming tab's
-"Add now" button will still post them one at a time.
+A run the server was down for is not lost. Sure checks every five minutes and
+makes the run at the first check after the server is back, posting every cycle
+missed since the last completed run, each dated on its own due date. The first
+run after enabling the feature reaches back only 7 days, so an instance with a
+long backlog does not post every open cycle it has ever accumulated.
+
+The Upcoming tab lists every unpaid past cycle, however old, ahead of the next
+30 days. Its "Add now" button posts one immediately.
 
 A posted transaction is an ordinary transaction: edit it, recategorize it or
 delete it like any other. It is recorded as the payment for its cycle, so the

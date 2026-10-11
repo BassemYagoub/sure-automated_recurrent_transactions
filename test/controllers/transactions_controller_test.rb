@@ -1614,6 +1614,22 @@ end
     assert_no_match(/#{dom_id(settled, :upcoming)}/, response.body, "a settled cycle is not upcoming")
   end
 
+  test "index upcoming list shows unpaid past cycles first, oldest first, with Post now" do
+    recurring = recurring_transactions(:netflix_subscription)
+    recurring.recurring_occurrences.delete_all
+
+    long_overdue = upcoming_occurrence(recurring, due_on: 40.days.ago.to_date)
+    overdue = upcoming_occurrence(recurring, due_on: 3.days.ago.to_date)
+    coming = upcoming_occurrence(recurring, due_on: 5.days.from_now.to_date)
+
+    get transactions_url
+    assert_response :success
+
+    rendered_rows = response.body.scan(/id="(upcoming_recurring_occurrence_[0-9a-f-]+)"/).flatten
+    assert_equal [ long_overdue, overdue, coming ].map { |occurrence| dom_id(occurrence, :upcoming) }, rendered_rows
+    assert_includes response.body, post_now_recurring_occurrence_path(long_overdue)
+  end
+
   test "index uncategorized_count cache reflects deleting an uncategorized transaction immediately" do
     original_cache = Rails.cache
     Rails.cache = ActiveSupport::Cache::MemoryStore.new

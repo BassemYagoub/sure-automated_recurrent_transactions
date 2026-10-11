@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_29_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_10_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -863,6 +863,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_29_120000) do
     t.boolean "personal_budgets", default: false, null: false
     t.boolean "recurring_auto_post_enabled", default: false, null: false
     t.integer "recurring_auto_post_hour", default: 6, null: false
+    t.datetime "recurring_auto_post_last_run_at"
     t.boolean "recurring_transactions_disabled", default: false, null: false
     t.string "stripe_customer_id"
     t.string "timezone"

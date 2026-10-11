@@ -38,6 +38,81 @@ class AutoPostRecurringTransactionsJobTest < ActiveJob::TestCase
     assert_includes enqueued_family_ids, @new_york.id
   end
 
+  test "a family whose hour passed while the server was off posts at the next check" do
+    @paris.update!(
+      timezone: "Europe/Paris",
+      recurring_auto_post_enabled: true,
+      recurring_auto_post_hour: 6,
+      recurring_auto_post_last_run_at: NOON_UTC - 3.days
+    )
+
+    travel_to NOON_UTC do
+      AutoPostRecurringTransactionsJob.new.perform
+    end
+
+    assert_equal [ @paris.id ], enqueued_family_ids
+  end
+
+  test "a family that already ran today waits for tomorrow" do
+    @paris.update!(
+      timezone: "Europe/Paris",
+      recurring_auto_post_enabled: true,
+      recurring_auto_post_hour: 6,
+      recurring_auto_post_last_run_at: Time.utc(2026, 9, 20, 4, 30) # 06:30 in Paris
+    )
+
+    travel_to NOON_UTC do
+      AutoPostRecurringTransactionsJob.new.perform
+    end
+
+    assert_equal [], enqueued_family_ids
+  end
+
+  test "a run is due from the chosen hour, not a moment before" do
+    @paris.update!(
+      timezone: "Europe/Paris",
+      recurring_auto_post_enabled: true,
+      recurring_auto_post_hour: 14,
+      recurring_auto_post_last_run_at: NOON_UTC - 1.day
+    )
+
+    travel_to(NOON_UTC - 1.second) { AutoPostRecurringTransactionsJob.new.perform }
+    assert_equal [], enqueued_family_ids
+
+    travel_to(NOON_UTC) { AutoPostRecurringTransactionsJob.new.perform }
+    assert_equal [ @paris.id ], enqueued_family_ids
+  end
+
+  test "a family that never ran posts later the same day once its hour has passed" do
+    @paris.update!(timezone: "Europe/Paris", recurring_auto_post_enabled: true, recurring_auto_post_hour: 6)
+
+    travel_to NOON_UTC do
+      AutoPostRecurringTransactionsJob.new.perform
+    end
+
+    assert_equal [ @paris.id ], enqueued_family_ids
+  end
+
+  test "a family that never ran and posts at midnight is not stranded" do
+    @paris.update!(timezone: "Europe/Paris", recurring_auto_post_enabled: true, recurring_auto_post_hour: 0)
+
+    travel_to NOON_UTC do
+      AutoPostRecurringTransactionsJob.new.perform
+    end
+
+    assert_equal [ @paris.id ], enqueued_family_ids
+  end
+
+  test "a family that never ran does not post before today's hour" do
+    @paris.update!(timezone: "Europe/Paris", recurring_auto_post_enabled: true, recurring_auto_post_hour: 15)
+
+    travel_to NOON_UTC do
+      AutoPostRecurringTransactionsJob.new.perform
+    end
+
+    assert_equal [], enqueued_family_ids
+  end
+
   test "an unknown timezone falls back rather than taking the sweep down" do
     @paris.update!(recurring_auto_post_enabled: true)
     # update_columns to get past the model's own zone validation: the point is
@@ -116,6 +191,25 @@ class AutoPostRecurringTransactionsJobTest < ActiveJob::TestCase
     RecurringTransaction::AutoPoster.any_instance.expects(:run!).never
 
     AutoPostRecurringTransactionsJob.new.perform(@paris.id)
+  end
+
+  test "the per-family branch records when it ran" do
+    @paris.update!(recurring_auto_post_enabled: true)
+
+    travel_to NOON_UTC do
+      AutoPostRecurringTransactionsJob.new.perform(@paris.id)
+    end
+
+    assert_equal NOON_UTC, @paris.reload.recurring_auto_post_last_run_at
+  end
+
+  test "a run that could not take the family lock is not recorded" do
+    @paris.update!(recurring_auto_post_enabled: true)
+    RecurringTransaction::Pipeline.stubs(:with_family_lock).returns(false)
+
+    AutoPostRecurringTransactionsJob.new.perform(@paris.id)
+
+    assert_nil @paris.reload.recurring_auto_post_last_run_at
   end
 
   test "the per-family branch posts due occurrences" do
