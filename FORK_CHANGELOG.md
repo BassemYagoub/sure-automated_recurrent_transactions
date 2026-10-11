@@ -1,7 +1,7 @@
 # Fork changelog
 
 Changes this fork carries on top of [Sure](https://github.com/we-promise/sure),
-currently tracking `0.7.5-alpha.10`. Upstream changes are not listed here.
+currently based on `v0.7.5-hotfix.2`. Upstream changes are not listed here.
 
 ## Unreleased
 
@@ -76,7 +76,9 @@ currently tracking `0.7.5-alpha.10`. Upstream changes are not listed here.
     `app/views/transactions/_upcoming_row.html.erb`,
     `app/views/transactions/_upcoming_settings_hint.html.erb`, and their tests.
   - Removed: `app/views/recurring_transactions/_projected_transaction.html.erb`,
-    which the rebuilt Upcoming tab no longer renders.
+    which the rebuilt Upcoming tab no longer renders, and the cached 10-day
+    projection behind it, with upstream's regression test for that cache
+    (#3907), which has nothing left to guard.
   - Known limitations:
     - Recurring transfers are not posted (they need a paired inflow and outflow).
     - The per-series toggle is not shown on the new-bill dialog, so a new bill
